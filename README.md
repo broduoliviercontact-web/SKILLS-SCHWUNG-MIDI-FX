@@ -1,132 +1,119 @@
-# Signal Chain Module
+# Schwung Module Skills for Claude Code
 
-The Signal Chain module lets you build patchable chains of MIDI FX, an optional MIDI source, a sound generator, and audio FX.
+A collection of Claude Code skills for building, packaging, and releasing **Schwung MIDI FX modules** for the Ableton Move.
 
-## Architecture
+---
 
-```
-[Input or MIDI Source] -> [MIDI FX] -> [Sound Generator] -> [Audio FX] -> [Output]
-```
+## What are these skills?
 
-Components live under `src/modules/chain/`:
-- `midi_fx/`: JavaScript MIDI effects registry and implementations
-- `sound_generators/`: Built-in generators (linein)
-- `audio_fx/`: Audio effects (freeverb)
+Skills are structured prompts that guide Claude through a specific task. Each one encodes hard-won knowledge about the Schwung API, Move hardware, packaging pitfalls, and release workflow — so you don't have to re-explain the context each time.
 
-Patch JSON files are stored in `/data/UserData/schwung/patches/` on the device.
+---
 
-## Patch Format
+## How to install
 
-Example:
+Copy this folder into your module repo's `.claude/commands/` directory:
 
-```json
-{
-    "name": "Chord Piano",
-    "version": 1,
-    "chain": {
-        "input": "pads",
-        "midi_source": {
-            "module": "sequencer"
-        },
-        "midi_fx": {
-            "chord": "major"
-        },
-        "synth": {
-            "module": "sf2",
-            "config": {
-                "preset": 0
-            }
-        },
-        "audio_fx": [
-            {
-                "type": "freeverb",
-                "params": {
-                    "room_size": 0.6,
-                    "wet": 0.25,
-                    "dry": 0.75
-                }
-            }
-        ]
-    }
-}
+```bash
+cp -r sssskkil/schwung   your-module-repo/.claude/commands/schwung
+cp -r sssskkil/templates your-module-repo/.claude/commands/templates
+cp    sssskkil/CLAUDE.md  your-module-repo/.claude/CLAUDE.md
+cp    sssskkil/MODULES.md your-module-repo/.claude/MODULES.md
+cp    sssskkil/API.md     your-module-repo/.claude/API.md
 ```
 
-### Input Routing
+Once in place, skills are available as `/schwung:<skill-name>` and `/templates:<skill-name>` in Claude Code.
 
-`input` controls which MIDI sources the chain accepts:
-- `pads`: Move internal pads/controls only
-- `external`: external USB MIDI only
-- `both`/`all`: allow both sources
+---
 
-If no `midi_source` is specified, the chain uses `input` for MIDI as before.
+## Workflow — from idea to release
 
-### MIDI FX
+Skills are designed to be used in order:
 
-Native MIDI FX supported today:
-- Chord: `major`, `minor`, `power`, `octave`
-- Arp: `up`, `down`, `up_down`, `random` with `arp_bpm` and `arp_division`
-
-JavaScript MIDI FX can be attached per patch using `midi_fx_js`:
-
-```json
-"midi_fx_js": ["octave_up"]
+```
+1. /schwung:audit-open-source-midi-fx        ← understand the source material
+2. /schwung:design-schwung-midi-fx-module     ← design the module
+3. /templates:create-module-json              ← generate module.json
+4. /schwung:implement-native-midi-fx          ← build the DSP engine (C)
+5. /templates:create-dsp-c                    ← generate dsp.c
+6. /schwung:build-move-ui-and-controls        ← design the Move UI
+7. /templates:create-ui-js                    ← generate ui.js (full screen, opened manually)
+8. /templates:create-ui-chain-js              ← generate ui_chain.js (chain slot — PRIMARY surface)
+9. /templates:add-move-pads                   ← add pad LED interaction
+10. /schwung:validate-module-for-catalogue    ← audit before release
+11. /schwung:package-external-module          ← package and release
 ```
 
-Available JS MIDI FX live in `midi_fx/` (see `index.mjs` for the registry).
+You don't need all steps — a pure-JS module skips steps 4–5, a module without custom UI skips 6–9.
 
-### Sound Generators
+---
 
-Sound generators can be built-in or external modules. Built-in: `linein`. External modules that work as chain sound generators include `sf2`, `dexed`, `minijv`, and `obxd` (plus any other module that is `chainable` with `component_type: "sound_generator"`).
+## Skills reference
 
-### Audio FX
+### `/schwung:` — Main workflow skills
 
-Audio FX are loaded by type. `freeverb` is included.
+| Skill | When to use |
+|-------|------------|
+| `audit-open-source-midi-fx` | Analyse an open-source MIDI FX project for porting to Schwung |
+| `convert-open-source-midi-fx-to-schwung` | Port an audited project into a Schwung module |
+| `design-schwung-midi-fx-module` | Design a new module from scratch (params, UI, engine plan) |
+| `implement-native-midi-fx` | Implement the C DSP engine |
+| `build-move-ui-and-controls` | Design the Move-facing UI and controls |
+| `validate-module-for-catalogue` | Full pre-release audit — catches all known packaging pitfalls |
+| `package-external-module` | Package and release to GitHub with Schwung installer support |
+| `repo-bootstrap` | Set up a new module repo from scratch |
 
-### MIDI Source
+### `/templates:` — Code generators
 
-Optional MIDI source modules can generate MIDI without external input.
+| Template | Generates |
+|----------|-----------|
+| `create-module-json` | `module.json` manifest |
+| `create-dsp-c` | Native C MIDI FX engine (`dsp.c`) |
+| `create-ui-js` | Full-screen Move UI (`ui.js`) |
+| `create-ui-chain-js` | Chain slot UI (`ui_chain.js`) |
+| `add-move-pads` | Pad LED interaction for any UI |
 
-Example:
+### Reference docs (loaded automatically by Claude)
 
-```json
-{
-    "chain": {
-        "midi_source": {
-            "module": "sequencer"
-        }
-    }
-}
+| File | Content |
+|------|---------|
+| `CLAUDE.md` | Project rules, guardrails, things to avoid |
+| `MODULES.md` | Full Schwung DSP plugin API reference |
+| `API.md` | Move JS host API (display, MIDI, LEDs, host functions) |
+| `ARCHITECTURE.md` | Schwung system architecture |
+| `BUILDING.md` | Build and deploy instructions |
+
+---
+
+## Key rules (enforced by all skills)
+
+**Never write to `/tmp/`** — root filesystem is read-only or full on Move. Always use `/data/UserData/`.
+
+**State goes through `set_param`/`get_param` only** — there is no `save_state`/`load_state` in the API. The chain host calls `set_param` on restore.
+
+**`ui_chain.js` is the primary interaction surface** — when a module sits in a Signal Chain slot, `ui_chain.js` loads, not `ui.js`. Most users never open the full-screen view. Design and implement `ui_chain.js` first. `ui.js` is a bonus, not the default.
+
+**LED in `ui_chain.js` uses `sharedSetLED`** — `move_midi_internal_send` silently drops in chain context.
+
+**Schwung installer expects `<id>-module.tar.gz`** — release must include the unversioned filename as an asset, not just the versioned one.
+
+---
+
+## Example usage
+
+```
+/schwung:design-schwung-midi-fx-module a euclidean rhythm generator with 3 lanes (kick/snare/hat), X/Y position map, randomness, and sync to Move transport
+
+/templates:create-module-json euclidean drum sequencer with map_x, map_y, density per lane, randomness, steps, bpm, sync
+
+/schwung:validate-module-for-catalogue src/module.json
 ```
 
-When a MIDI source is active, source-generated MIDI is routed into the chain,
-and external/pads input still follows the `input` filter.
+---
 
-MIDI sources can expose a full-screen UI inside the chain by providing
-`ui_chain.js` (or `ui_chain` in `module.json` to point to a different file). The
-file should set `globalThis.chain_ui = { init, tick, onMidiMessageInternal, onMidiMessageExternal }`
-and must not override `globalThis.init`/`tick`.
+## Reference implementations
 
-Chain will enter the source UI when a patch with a supported source loads. Press
-Back to return to the chain view, and Menu to re-enter the source UI.
+- **Branchage** — full module with DSP engine, `ui.js`, `ui_chain.js`, pad X/Y glow, jog navigation
+- **Grilles** — same pattern, two-page chain UI with pad glow and playhead display
 
-## Patch Browser Controls
-
-- Jog wheel: highlight patches
-- Jog click: load highlighted patch
-- Back: return to list (or exit source UI first)
-- Up/Down: octave transpose in patch view
-
-## Raw MIDI and Knob Touch
-
-By default, the host filters knob-touch notes (0-9) from internal MIDI. To bypass this for Signal Chain, set `"raw_midi": true` in `module.json`.
-
-## External Module Presets
-
-External modules can install chain presets into `/data/UserData/schwung/patches/` via their install scripts (for example Mini-JV and OB-Xd).
-
-## AI Assistance Disclaimer
-
-This module is part of Schwung and was developed with AI assistance, including Claude, Codex, and other AI assistants.
-
-All architecture, implementation, and release decisions are reviewed by human maintainers.  
-AI-assisted content may still contain errors, so please validate functionality, security, and license compatibility before production use.
+Both repos use these skills and contain working examples of every pattern documented here.
